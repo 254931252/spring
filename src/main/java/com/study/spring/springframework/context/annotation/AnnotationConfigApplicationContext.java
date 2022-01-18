@@ -3,7 +3,10 @@ package com.study.spring.springframework.context.annotation;
 import com.study.spring.springframework.beans.factory.config.BeanDefinition;
 import com.study.spring.springframework.stereotype.Component;
 
+import java.beans.Introspector;
 import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Objects;
@@ -15,12 +18,12 @@ import java.util.Objects;
  */
 public class AnnotationConfigApplicationContext {
 
-    private HashMap<String, BeanDefinition> beanDefinitionMap = new HashMap<>();
+    private static final HashMap<String, BeanDefinition> beanDefinitionMap = new HashMap<>();
 
     /**
      * 单例池
      */
-    private HashMap<String, Object> singletonBeans = new HashMap<>();
+    private static final HashMap<String, Object> singletonBeans = new HashMap<>();
 
 
     public AnnotationConfigApplicationContext(Class<?> configClass) {
@@ -56,6 +59,9 @@ public class AnnotationConfigApplicationContext {
                             if (aClass.isAnnotationPresent(Component.class)) {
                                 Component component = aClass.getAnnotation(Component.class);
                                 String beanName = component.value();
+                                if ("".equals(beanName)) {
+                                    beanName = Introspector.decapitalize(aClass.getSimpleName());
+                                }
                                 BeanDefinition beanDefinition = createBeanDefinition(aClass);
                                 beanDefinitionMap.put(beanName, beanDefinition);
                             }
@@ -97,8 +103,16 @@ public class AnnotationConfigApplicationContext {
 
     private Object createBean(Class<?> clazz) {
         try {
-            return clazz.newInstance();
-        } catch (InstantiationException | IllegalAccessException e) {
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            // 依赖注入
+            for (Field field : clazz.getDeclaredFields()) {
+                if (field.isAnnotationPresent(Autowired.class)) {
+                    field.setAccessible(true);
+                    field.set(instance, getBean(field.getName()));
+                }
+            }
+            return instance;
+        } catch (InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
             e.printStackTrace();
         }
         throw new RuntimeException("createBean failed");
